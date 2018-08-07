@@ -20,7 +20,7 @@ def serialize_lm(htid,lm):
     fmt = STRUCT_FMT % ('@', len(lm))
     return struct.pack(fmt, lm.seed, len(lm), htid.encode('utf-8'), *lm.hashvalues)
 
-def deserialize_lm(buf, length, encoding='utf-8'):
+def deserialize_lm(buf, length, encoding='utf-8', **kwargs):
     fmt = STRUCT_FMT % ('@', length)
     try:
         unpack = struct.unpack_from(fmt, buf, 0)
@@ -50,7 +50,7 @@ class HashReader(object):
     def __exit__(self, exc_type, exc_value, traceback):
         self.fd.close()
         
-    def hashes(self, batch_size=100, deserialize=True):
+    def hashes(self, batch_size=100, encoding='utf-8', deserialize=True, **kwargs):
         ''' Read hashes as an iterator. It doesn't make sense to read a few hundred bytes at a time,
         so the reader collects hashsize*batchsize bytes at a time.'''
         
@@ -67,6 +67,10 @@ class HashReader(object):
                     break
                 j += 1
                 if deserialize:
-                    yield deserialize_lm(data[start:end], self.num_perm)
+                    yield deserialize_lm(data[start:end], self.num_perm, **kwargs)
                 else:
-                    yield data[start:end]
+                    part = data[start:end]
+                    # Return full serialized hash, alongside extracted volume id
+                    htid_dirty = struct.unpack('@qi30s', part[:42])[2]
+                    htid = htid_dirty.strip(b'\x00').decode(encoding)
+                    yield (htid, part)
